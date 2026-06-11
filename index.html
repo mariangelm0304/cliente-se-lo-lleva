@@ -59,8 +59,6 @@
   input[type=file]{display:none}
   .meta{font-size:11px;color:var(--muted);margin-top:6px}
   .chart-box{position:relative;height:300px}
-  .legend-dots{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--ink-soft);margin-top:8px}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -121,8 +119,50 @@
 <div id="toast" class="toast"></div>
 
 <script>
+// === CATÁLOGO DE TIENDAS ============================================
+// Edita aquí para agregar/cambiar nombres de tiendas.
+// El tablero remapea automáticamente la columna "Tienda" usando "Cl.entrega".
+const TIENDA_MAP = {
+  3000: 'ALMACEN PRINCIPAL',
+  3001: 'ALMACEN HIPER',
+  3002: 'ALMACEN NORTE',
+  3004: 'ALMACEN SANTA MARTA',
+  3005: 'ALMACEN LA PLAZUELA',
+  3006: 'ALMACEN CUATRO VIENTOS',
+  3007: 'ALMACEN SAN FELIPE',
+  3008: 'ALMACEN VALLEDUPAR NOV',
+  3009: 'ALMACEN SINCELEJO',
+  3010: 'ALMACEN RIOHACHA',
+  3011: 'ALMACEN MONTERIA',
+  3012: 'ALMACEN BUCARAMANGA',
+  3013: 'ALMACEN PLAZA DEL SOL',
+  3014: 'ALMACEN PIEDECUESTA',
+  3015: 'ALMACEN MAYALES',
+  3016: 'ALMACEN MEDELLIN',
+  3017: 'ALMACEN LA 27',
+  3018: 'ALMACEN LOS MOLINOS',
+  3019: 'ALMACEN SUBA',
+  3020: 'ALMACEN LA FLORIDA',
+  3021: 'ALMACEN METROPOLITANO',
+  3022: 'ALMACEN BOSA',
+  3023: 'ALMACEN LAS AMERICAS',
+  3024: 'E-COMMERCE COLOMBIA',
+  3025: 'ALMACEN LA CENTRAL',
+  3026: 'BODEGA TEMPORAL',
+  3027: 'BUCARAMANGA CENTRO',
+  3028: 'JAMAR PREMIUM PLAZA',
+  3029: 'ALMACEN VALLEDUPAR',
+  3030: 'ALMACEN JAMAR NORTE BOGOTA',
+  3031: 'ALMACEN FABRICATO',
+  3032: 'ALMACEN VILLAVICENCIO',
+  3033: 'ALMACEN EL EDEN',
+  3034: 'JAMAR CRA 30',
+};
+// ====================================================================
+
 const STATE = { rows: [], columns: [], generatedAt: null, chartT: null, chartZ: null };
 const DATE_COLS = ['Fe.picking','Fe.entrega'];
+const BASE_COLUMNS = ['Transportes','y','entregas','StatusGlob','Entrg.ext.','Cl.entrega','Tienda','RutaTransp','Zona','Nombre','Fe.picking','Fe.entrega'];
 
 function toast(msg, kind){
   const t = document.getElementById('toast');
@@ -159,7 +199,6 @@ function daysAgo(d){
 }
 
 function rowStatus(r){
-  // worst case across date columns: how old is the most recent picking/entrega date
   let maxDays = -Infinity;
   for(const c of DATE_COLS){
     const d = parseDate(r[c]);
@@ -175,13 +214,27 @@ function rowStatus(r){
   return {label:`en ${-maxDays} días`, kind:'ok', days:maxDays};
 }
 
+function applyTiendaMap(rows){
+  // Siempre re-calcula "Tienda" desde el código en "Cl.entrega" usando TIENDA_MAP.
+  // Si el código no está en el catálogo, deja la Tienda existente o vacío.
+  rows.forEach(r=>{
+    const code = r['Cl.entrega'];
+    const k = (code===null||code===undefined||code==='') ? null : parseInt(code,10);
+    if(k!=null && !isNaN(k) && TIENDA_MAP[k]){
+      r['Tienda'] = TIENDA_MAP[k];
+    } else if(!r['Tienda']){
+      r['Tienda'] = '';
+    }
+  });
+  return rows;
+}
+
 function uniq(arr){ return [...new Set(arr.filter(x=>x!=null && x!==''))].sort(); }
 
 function render(){
   document.getElementById('meta').textContent =
-    `${STATE.rows.length} registros · Última carga: ${STATE.generatedAt ? new Date(STATE.generatedAt).toLocaleString('es-CO') : 'desconocida'}`;
+    `${STATE.rows.length} registros · ${Object.keys(TIENDA_MAP).length} tiendas en catálogo · Última carga: ${STATE.generatedAt ? new Date(STATE.generatedAt).toLocaleString('es-CO') : 'desconocida'}`;
 
-  // KPIs
   let alert=0, warn=0, ok=0, sinFecha=0, totalTiendas=new Set(), totalZonas=new Set();
   STATE.rows.forEach(r=>{
     const s = rowStatus(r);
@@ -199,7 +252,6 @@ function render(){
     <div class="kpi ok"><div class="lbl">Al día (≤7 días)</div><div class="val">${ok}</div><div class="sub">${sinFecha} sin fecha</div></div>
   `;
 
-  // Filters dropdowns
   const tSel = document.getElementById('fTienda');
   const zSel = document.getElementById('fZona');
   const curT = tSel.value, curZ = zSel.value;
@@ -258,7 +310,6 @@ function renderTable(){
 }
 
 function renderCharts(){
-  // by tienda (top 12)
   const byT = {};
   STATE.rows.forEach(r=>{ const k=r['Tienda']||'(sin)'; byT[k]=(byT[k]||0)+1; });
   const sortedT = Object.entries(byT).sort((a,b)=>b[1]-a[1]).slice(0,12);
@@ -270,7 +321,6 @@ function renderCharts(){
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{beginAtZero:true,ticks:{precision:0}}}}
   });
 
-  // by zona
   const byZ = {};
   STATE.rows.forEach(r=>{ const k=r['Zona']||'(sin)'; byZ[k]=(byZ[k]||0)+1; });
   const sortedZ = Object.entries(byZ).sort((a,b)=>b[1]-a[1]).slice(0,10);
@@ -284,7 +334,6 @@ function renderCharts(){
   });
 }
 
-// === Data loading ===
 async function loadJsonFromServer(){
   try{
     const res = await fetch('data.json?_=' + Date.now(), {cache:'no-store'});
@@ -299,8 +348,10 @@ async function loadJsonFromServer(){
 }
 
 function applyPayload(json){
-  STATE.rows = json.rows || [];
-  STATE.columns = json.columns && json.columns.length ? json.columns : (STATE.rows[0] ? Object.keys(STATE.rows[0]) : []);
+  let rows = json.rows || [];
+  rows = applyTiendaMap(rows);
+  STATE.rows = rows;
+  STATE.columns = (json.columns && json.columns.length) ? json.columns : (rows[0] ? Object.keys(rows[0]) : BASE_COLUMNS);
   STATE.generatedAt = json.generatedAt || new Date().toISOString();
   render();
 }
@@ -312,18 +363,46 @@ function xlsxToPayload(file){
       try{
         const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws, {defval:null, raw:false, dateNF:'yyyy-mm-dd'});
-        const cols = json.length ? Object.keys(json[0]) : [];
-        // normalize dates to YYYY-MM-DD
-        json.forEach(r=>{
+        // First try sheet_to_json with headers, then fall back to combining cols I-M
+        const aoa = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:false, dateNF:'yyyy-mm-dd'});
+        if(!aoa.length){ resolve({generatedAt:new Date().toISOString(),columns:BASE_COLUMNS,rows:[]}); return; }
+        const headerRow = aoa[0].map(h=>h==null?'':String(h).trim());
+        // Detect if the raw export shape (15 cols, name parts in I-M) is being uploaded
+        const isRaw = headerRow.length>=15 && /picking/i.test(headerRow[13]||'') && /entrega/i.test(headerRow[14]||'');
+        const rows = [];
+        for(let i=1;i<aoa.length;i++){
+          const r = aoa[i]; if(!r) continue;
+          let obj;
+          if(isRaw){
+            const nombre = [r[8],r[9],r[10],r[11],r[12]].filter(v=>v!=null && String(v).trim()!=='').map(v=>String(v).trim()).join(' ');
+            obj = {
+              'Transportes': r[0],
+              'y': r[1],
+              'entregas': r[2],
+              'StatusGlob': r[3],
+              'Entrg.ext.': r[4],
+              'Cl.entrega': r[5],
+              'Tienda': '',
+              'RutaTransp': r[6],
+              'Zona': r[7],
+              'Nombre': nombre,
+              'Fe.picking': r[13],
+              'Fe.entrega': r[14],
+            };
+          } else {
+            obj = {};
+            headerRow.forEach((h,idx)=>{ obj[h] = r[idx]; });
+          }
+          // Normalize date strings to YYYY-MM-DD
           DATE_COLS.forEach(c=>{
-            if(r[c]){
-              const d = parseDate(r[c]);
-              if(d) r[c] = d.toISOString().slice(0,10);
-            }
+            if(obj[c]){ const d = parseDate(obj[c]); if(d) obj[c] = d.toISOString().slice(0,10); }
           });
-        });
-        resolve({generatedAt:new Date().toISOString(), columns:cols, rows:json});
+          // Skip fully empty rows
+          if(Object.values(obj).every(v=>v==null || String(v).trim()==='')) continue;
+          rows.push(obj);
+        }
+        const cols = isRaw ? BASE_COLUMNS : (rows[0] ? Object.keys(rows[0]) : BASE_COLUMNS);
+        resolve({generatedAt:new Date().toISOString(), columns:cols, rows});
       }catch(err){ reject(err); }
     };
     reader.onerror = reject;
